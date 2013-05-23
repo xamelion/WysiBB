@@ -1,4 +1,4 @@
-/*! WysiBB - WYSIWYG BBCode editor - v1.4.0 - 2013-03-01
+/*! WysiBB - WYSIWYG BBCode editor - v1.4.2 - 2013-04-06
 * http://www.wysibb.com
 * Copyright (c) 2013 Vadim Dobroskok; Licensed MIT, GPL */
 
@@ -79,7 +79,7 @@ WBBLANG['ru']= CURLANG = {
 	
 	
 };
-var wbbdebug=true;
+wbbdebug=true;
 (function($) {
 	'use strict';
 	$.wysibb = function(txtArea,settings) {
@@ -361,11 +361,14 @@ var wbbdebug=true;
 						],
 						onSubmit: function(cmd,opt,queryState) {
 							var url = this.$modal.find('input[name="SRC"]').val();
+							if (url) {
+								url = url.replace(/^\s+/,"").replace(/\s+$/,"");
+							}
 							var a;
 							if (url.indexOf("youtu.be")!=-1) {
-								a = url.match(/^http:\/\/youtu\.be\/([a-z0-9_]+)/i);
+								a = url.match(/^http:\/\/youtu\.be\/([a-z0-9_-]+)/i);
 							}else{
-								a = url.match(/^http:\/\/www\.youtube\.com\/watch\?.*?v=([a-z0-9_]+)/i);
+								a = url.match(/^http:\/\/www\.youtube\.com\/watch\?.*?v=([a-z0-9_-]+)/i);
 							}
 							if (a && a.length==2) {
 								var code = a[1];
@@ -570,6 +573,14 @@ var wbbdebug=true;
 				var ob = o.allButtons[btnlist[bidx]];
 				if (!ob ) {continue;}
 				ob.en=true;
+				
+				//check for simplebbcode
+				if (ob.simplebbcode && $.isArray(ob.simplebbcode) && ob.simplebbcode.length==2) {
+					ob.bbcode = ob.html = ob.simplebbcode[0]+"{SELTEXT}"+ob.simplebbcode[1];
+					if (ob.transform) delete ob.transform;
+					if (ob.modal)  delete ob.modal;
+				}
+				
 				//add transforms to option list
 				if (ob.type=="select" && typeof(ob.options)=="string") {
 					var olist = ob.options.split(",");
@@ -827,7 +838,7 @@ var wbbdebug=true;
 							this.$pasteBlock = $(this.elFromString('<div style="opacity:0;" contenteditable="true">\uFEFF</div>'));
 							
 							this.$pasteBlock.appendTo(this.body);
-							if ($.support.htmlSerialize) {this.$pasteBlock.focus();} //IE 7,8 FIX
+							if (!$.support.htmlSerialize) {this.$pasteBlock.focus();} //IE 7,8 FIX
 								setTimeout($.proxy(function() {
 									this.clearPaste(this.$pasteBlock);
 									var rdata = '<span>'+this.$pasteBlock.html()+'</span>';
@@ -872,7 +883,7 @@ var wbbdebug=true;
 				
 				//add event listeners
 				this.$body.bind('mouseup keyup',$.proxy(this.updateUI,this));
-				this.$body.bind('mousedown',$.proxy(function(e) {this.checkForLastBR(e.target)},this));
+				this.$body.bind('mousedown',$.proxy(function(e) {this.clearLastRange();this.checkForLastBR(e.target)},this));
 
 				//trace Textarea
 				if (this.options.traceTextarea===true) {
@@ -943,7 +954,6 @@ var wbbdebug=true;
 					}else if (opt.type=="smilebox") {
 						this.buildSmilebox($btnContainer,bn,opt);
 					}else{
-						
 						this.buildButton($btnContainer,bn,opt);
 					}
 				}
@@ -973,14 +983,13 @@ var wbbdebug=true;
 			var hotkey = (this.options.hotkeys===true && this.options.showHotkeys===true && opt.hotkey) ? (' <span class="tthotkey">['+opt.hotkey+']</span>'):""
 			var $btn = $('<div class="wysibb-toolbar-btn wbb-'+bn+'">').appendTo(container).append(btnHTML).append(this.strf('<span class="btn-tooltip">{title}<ins/>{hotkey}</span>',{title:opt.title,hotkey:hotkey}));
 			
-			//if ($.support.htmlSerialize) {$btn.attr("unselectable","on").find("*").attr("unselectable","on");} //fix for ie8 and lower
 			//attach events
 			this.controllers.push($btn);
 			$btn.bind('queryState',$.proxy(function(e) {
 				(this.queryState(bn)) ? $(e.currentTarget).addClass("on"):$(e.currentTarget).removeClass("on");
 			},this));
 			$btn.mousedown($.proxy(function(e) {
-				if (e.preventDefault) e.preventDefault();
+				e.preventDefault();
 				this.execCommand(bn,opt.exvalue || false);
 				$(e.currentTarget).trigger('queryState');
 			},this));
@@ -1037,7 +1046,7 @@ var wbbdebug=true;
 		},
 		buildTablepicker: function(container,bn,opt) {
 			var $btn = $('<div class="wysibb-toolbar-btn wbb-dropdown wbb-tbl">').appendTo(container).append('<span class="btn-inner fonticon ve-tlb-table1">\uE00e</span><ins class="fonticon ar">\uE011</ins>').append(this.strf('<span class="btn-tooltip">{title}<ins/></span>',{title:opt.title}));
-			//if ($.support.htmlSerialize) {$btn.attr("unselectable","on").find("*").attr("unselectable","on");} //fix for ie8 and lower
+			
 			var $dropblock = $('<div class="wbb-list">').appendTo($btn);
 			var rows = opt.rows || 10;
 			var cols = opt.cols || 10;
@@ -1053,7 +1062,6 @@ var wbbdebug=true;
 			//this.debug("Attach event on: tbl-sel");
 			$btn.find(".tbl-sel").mousedown($.proxy(function(e) {
 				e.preventDefault();
-				//this.selectLastRange();
 				var t = $(e.currentTarget).attr("title");
 				var rc = t.split(",");
 				var code = (this.options.bbmode) ? '[table]':'<table class="wbb-table" cellspacing="5" cellpadding="0">';
@@ -1078,10 +1086,9 @@ var wbbdebug=true;
 			var $btn = $('<div class="wysibb-toolbar-btn wbb-select wbb-'+bn+'">').appendTo(container).append(this.strf('<span class="val">{title}</span><ins class="fonticon sar">\uE012</ins>',opt)).append(this.strf('<span class="btn-tooltip">{title}<ins/></span>',{title:opt.title}));  
 			var $sblock = $('<div class="wbb-list">').appendTo($btn);
 			var $sval = $btn.find("span.val");
-			//if ($.support.htmlSerialize) {$btn.attr("unselectable","on").find("*").attr("unselectable","on");} //fix for ie8 and lower
 			
 			var olist = ($.isArray(opt.options)) ? opt.options:opt.options.split(",");
-			//$.log(this.printObjectInIE(olist));
+			
 			for (var i=0; i<olist.length; i++) {
 				var oname = olist[i];
 				if (typeof(oname)=="string") {
@@ -1122,7 +1129,6 @@ var wbbdebug=true;
 			$btn.mousedown($.proxy(function(e) {
 				e.preventDefault();
 				this.dropdownclick(".wbb-select",".wbb-list",e);
-				$.log("LLR: "+this.lastRange);
 			},this));
 			$btn.find(".option").mousedown($.proxy(function(e) {
 				e.preventDefault();
@@ -1163,13 +1169,7 @@ var wbbdebug=true;
 				},this));
 			}
 			//check for onlyClearText
-			if (this.isInClearTextBlock()) {
-				this.$toolbar.find(".wysibb-toolbar-btn:not(.on,.mswitch)").addClass("dis");
-			}else{
-				this.$toolbar.find(".wysibb-toolbar-btn.dis").removeClass("dis");
-			}
-			
-			
+			this.disNonActiveButtons();
 		},
 		initModal: function() {
 			this.$modal=$("#wbbmodal");
@@ -1301,10 +1301,12 @@ var wbbdebug=true;
 					}
 				}else{
 					//custom command
-					for (var i=0; i<opt.rootSelector.length; i++) {
-						var n = this.isContain(this.getSelectNode(),opt.rootSelector[i]);
-						if (n) {
-							return this.getParams(n,opt.rootSelector[i]);
+					if ($.isArray(opt.rootSelector)) {
+						for (var i=0; i<opt.rootSelector.length; i++) {
+							var n = this.isContain(this.getSelectNode(),opt.rootSelector[i]);
+							if (n) {
+								return this.getParams(n,opt.rootSelector[i]);
+							}
 						}
 					}
 					return false;
@@ -1522,26 +1524,28 @@ var wbbdebug=true;
 			});
 			
 			//insert first with max params
-			var rbbcode=null,maxpcount=0;;
-			var tr=[];
-			$.each(this.options.allButtons[command].transform,function(html,bb) {
-				tr.push(bb);
-			});
-			tr=this.sortArray(tr,-1);
-			$.each(tr,function(i,v) {
-				var valid=true,pcount=0,pname={};;
-				v = v.replace(/\{(.*?)(\[.*?\])*\}/g,function(str,p,vrgx) {
-					var vrgxp;
-					p = p.toLowerCase();
-					if (vrgx) {
-						vrgxp = new RegExp(vrgx+"+","i");
-					}
-					if (typeof(params[p.toLowerCase()])=="undefined" || (vrgx && params[p.toLowerCase()].toString().match(vrgxp)===null)) {valid=false;};
-					if (typeof(params[p])!="undefined" && !pname[p]) {pname[p]=1;pcount++;}
-					return (typeof(params[p.toLowerCase()])=="undefined") ? "":params[p.toLowerCase()];
+			var rbbcode=null,maxpcount=0;
+			if (this.options.allButtons[command].transform) {
+				var tr=[];
+				$.each(this.options.allButtons[command].transform,function(html,bb) {
+					tr.push(bb);
 				});
-				if (valid && (pcount>maxpcount)) {rbbcode = v;maxpcount=pcount;}
-			});
+				tr=this.sortArray(tr,-1);
+				$.each(tr,function(i,v) {
+					var valid=true,pcount=0,pname={};;
+					v = v.replace(/\{(.*?)(\[.*?\])*\}/g,function(str,p,vrgx) {
+						var vrgxp;
+						p = p.toLowerCase();
+						if (vrgx) {
+							vrgxp = new RegExp(vrgx+"+","i");
+						}
+						if (typeof(params[p.toLowerCase()])=="undefined" || (vrgx && params[p.toLowerCase()].toString().match(vrgxp)===null)) {valid=false;};
+						if (typeof(params[p])!="undefined" && !pname[p]) {pname[p]=1;pcount++;}
+						return (typeof(params[p.toLowerCase()])=="undefined") ? "":params[p.toLowerCase()];
+					});
+					if (valid && (pcount>maxpcount)) {rbbcode = v;maxpcount=pcount;}
+				});
+			}
 			return rbbcode || bbcode;
 		},
 		getHTMLByCommand: function(command,params) {
@@ -1586,25 +1590,27 @@ var wbbdebug=true;
 			
 			//insert first with max params
 			var rhtml=null,maxpcount=0;
-			var tr=[];
-			$.each(this.options.allButtons[command].transform,function(html,bb) {
-				tr.push(html);
-			});
-			tr=this.sortArray(tr,-1);
-			$.each(tr,function(i,v) {
-				var valid=true, pcount=0,pname={};
-				v = v.replace(/\{(.*?)(\[.*?\])*\}/g,function(str,p,vrgx) {
-					var vrgxp;
-					p = p.toLowerCase();
-					if (vrgx) {
-						vrgxp = new RegExp(vrgx+"+","i");
-					}
-					if (typeof(params[p])=="undefined" || (vrgx && params[p].toString().match(vrgxp)===null)) {valid=false;};
-					if (typeof(params[p])!="undefined" && !pname[p]) {pname[p]=1;pcount++;}
-					return (typeof(params[p])=="undefined") ? "":params[p];
+			if (this.options.allButtons[command].transform) {
+				var tr=[];
+				$.each(this.options.allButtons[command].transform,function(html,bb) {
+					tr.push(html);
 				});
-				if (valid && (pcount>maxpcount)) {rhtml = v;maxpcount=pcount;}
-			});
+				tr=this.sortArray(tr,-1);
+				$.each(tr,function(i,v) {
+					var valid=true, pcount=0,pname={};
+					v = v.replace(/\{(.*?)(\[.*?\])*\}/g,function(str,p,vrgx) {
+						var vrgxp;
+						p = p.toLowerCase();
+						if (vrgx) {
+							vrgxp = new RegExp(vrgx+"+","i");
+						}
+						if (typeof(params[p])=="undefined" || (vrgx && params[p].toString().match(vrgxp)===null)) {valid=false;};
+						if (typeof(params[p])!="undefined" && !pname[p]) {pname[p]=1;pcount++;}
+						return (typeof(params[p])=="undefined") ? "":params[p];
+					});
+					if (valid && (pcount>maxpcount)) {rhtml = v;maxpcount=pcount;}
+				});
+			}
 			return (rhtml || html)+postsel;
 		},
 		
@@ -1856,9 +1862,7 @@ var wbbdebug=true;
 		},
 		toBB: function(data) {
 			if (!data) {return "";};
-			//.replace(/\[/g,"&#91;").replace(/\]/g,"&#93;")
 			var $e = (typeof(data)=="string") ? $('<span>').html(data):$(data);
-			
 			//remove last BR
 			$e.find("div,blockquote,p").each(function() {
 				if (this.nodeType!=3 && this.lastChild && this.lastChild.tagName=="BR") {
@@ -1885,9 +1889,6 @@ var wbbdebug=true;
 				var $el = $(el);
 				if (el.nodeType===3) {
 					outbb+=el.data.replace(/\n+/,"").replace(/\t/g,"   ");
-					//outbb+=el.data.replace(/\t/g,"   ");
-				/* }else if (el.tagName=="BR") {
-					outbb+="\n"; */
 				}else{
 					//process html tag
 					var rpl,processed=false;
@@ -1962,7 +1963,6 @@ var wbbdebug=true;
 									return cont || "";
 								},this));
 								if (skip) {continue;}
-								//$.log("bbcode: "+bbcode);
 								if ($el.is("img,br,hr")) {
 									//replace element
 									outbb+=bbcode;
@@ -1970,11 +1970,18 @@ var wbbdebug=true;
 									break;
 								}else{
 									if (keepElement && !$el.attr("notkeep")) {
-										if ($.support.htmlSerialize) {
-											$el.empty().append($('<span>').html(bbcode));
+										if ($el.is("table,tr,td")) {
+											bbcode = this.fixTableTransform(bbcode);
+											outbb+=this.toBB($('<span>').html(bbcode));
+											$el=null;
 										}else{
-											$el.empty().html('<span>'+bbcode+'</span>');
+											if ($.support.htmlSerialize) {
+												$el.empty().append($('<span>').html(bbcode));
+											}else{
+												$el.empty().html('<span>'+bbcode+'</span>');
+											}
 										}
+										
 									}else{
 										if ($el.is("iframe")) {
 											outbb+=bbcode;
@@ -2172,26 +2179,29 @@ var wbbdebug=true;
 			return a;
 		},
 		clearFromSubInsert: function(html,cmd) {
-			var $wr = $('<div>').html(html);
-			$.each(this.options.allButtons[cmd].rootSelector,$.proxy(function(i,s) {
-				var seltext=false;
-				if (typeof(this.options.rules[s][0][1]["seltext"])!="undefined") {
-					seltext = this.options.rules[s][0][1]["seltext"]["sel"];
-				}
-				var res=true;
-				$wr.find("*").each(function() { //work with find("*") and "is", becouse in ie7-8 find is case sensitive
-					if ($(this).is(s)) {
-						if (seltext && seltext["sel"]) {
-							$(this).replaceWith($(this).find(seltext["sel"].toLowerCase()).html());
-						}else{
-							$(this).replaceWith($(this).html());
-						}
-						res=false;
+			if (this.options.allButtons[cmd] && this.options.allButtons[cmd].rootSelector) {
+				var $wr = $('<div>').html(html);
+				$.each(this.options.allButtons[cmd].rootSelector,$.proxy(function(i,s) {
+					var seltext=false;
+					if (typeof(this.options.rules[s][0][1]["seltext"])!="undefined") {
+						seltext = this.options.rules[s][0][1]["seltext"]["sel"];
 					}
-				});
-				return res;
-			},this));
-			return $wr.html();
+					var res=true;
+					$wr.find("*").each(function() { //work with find("*") and "is", becouse in ie7-8 find is case sensitive
+						if ($(this).is(s)) {
+							if (seltext && seltext["sel"]) {
+								$(this).replaceWith($(this).find(seltext["sel"].toLowerCase()).html());
+							}else{
+								$(this).replaceWith($(this).html());
+							}
+							res=false;
+						}
+					});
+					return res;
+				},this));
+				return $wr.html();
+			}
+			return html;
 		},
 		splitPrevNext: function(node) {
 			if (node.nodeType==3) {node = node.parentNode};
@@ -2301,9 +2311,6 @@ var wbbdebug=true;
 		},
 		clearPaste: function(el) {
 			var $block = $(el);
-			//clear paste
-			//$.log("clearPaste");
-			
 			//NEW 
 			$.each(this.options.rules,$.proxy(function(s,ar) {
 				var $sf = $block.find(s).attr("wbbkeep",1);
@@ -2324,6 +2331,7 @@ var wbbdebug=true;
 			},this));
 			$block.find("*[wbbkeep]").removeAttr("wbbkeep").removeAttr("style");
 			$.log($block.html());
+			//$.log("BBCODE: "+this.toBB($block.clone(true)));
 			$block.html(this.getHTML(this.toBB($block),true));
 			$.log($block.html());
 			
@@ -2434,12 +2442,11 @@ var wbbdebug=true;
 				}
 			}
 		},
-		isInClearTextBlock: function(snode) {
-			if (this.cleartext && this.options.bbmode===false) {
-				if (!snode) {snode = this.getSelectNode();}
+		isInClearTextBlock: function() {
+			if (this.cleartext) {
 				var find=false;
 				$.each(this.cleartext,$.proxy(function(sel,command) {
-					if (this.isContain(snode,sel)) {
+					if (this.queryState(command)) {
 						find=command;
 						return false;
 					}
@@ -2459,6 +2466,13 @@ var wbbdebug=true;
 				html = html.replace('_'+a+'="',a+'="');
 			});
 			return html;
+		},
+		disNonActiveButtons: function() {
+			if (this.isInClearTextBlock()) {
+				this.$toolbar.find(".wysibb-toolbar-btn:not(.on,.mswitch)").addClass("dis");
+			}else{
+				this.$toolbar.find(".wysibb-toolbar-btn.dis").removeClass("dis");
+			}
 		},
 		
 		//MODAL WINDOW
@@ -2572,7 +2586,7 @@ var wbbdebug=true;
 			},this));
 			
 			$(document.body).css("overflow","hidden"); //lock the screen, remove scroll on body
-			if (document.body.scrollHeight > document.body.clientHeight) { //if body has scroll, add padding-right 18px
+			if ($("body").height() > $(window).height()) { //if body has scroll, add padding-right 18px
 				$(document.body).css("padding-right","18px");
 			}
 			this.$modal.show();
@@ -2654,7 +2668,7 @@ var wbbdebug=true;
 					},this)
 				});
 				
-				if ($.support.htmlSerialize) {
+				if (!$.support.htmlSerialize) {
 					//ie not posting form by security reason, show default file upload
 					$.log("IE not posting form by security reason, show default file upload");
 					this.$modal.find("#nicebtn").hide();
@@ -2695,6 +2709,19 @@ var wbbdebug=true;
 					$("#exlog").append('<p>'+(time-this.startTime)+" ms: "+msg+'</p>');  
 				}
 				this.startTime=time;
+			}
+		},
+		
+		//Browser fixes
+		isChrome: function() {
+			return (window.chrome) ? true:false;
+		},
+		fixTableTransform: function(html) {
+			if (!html) {return "";}
+			if ($.inArray("table",this.options.buttons)==-1) {
+				return html.replace(/\<(\/*?(table|tr|td|tbody))[^>]*\>/ig,"");
+			}else{
+				return html.replace(/\<(\/*?(table|tr|td))[^>]*\>/ig,"[$1]".toLowerCase()).replace(/\<\/*tbody[^>]*\>/ig,"");
 			}
 		}
 	}
